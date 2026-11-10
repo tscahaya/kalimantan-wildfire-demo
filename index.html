@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kalimantan Wildfire Command Center</title>
+  <!-- ArcGIS Maps SDK for JavaScript 5.1 (includes the <arcgis-scene> map component) from Esri's CDN.
+       Needs 4.34+ because FlowRenderer layers can only be lifted above the ground in 3D from that version. -->
+  <script type="module" src="https://js.arcgis.com/5.1/"></script>
+  <!-- Chart.js draws the water-table trend chart -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- The 3D map fills the whole screen; everything else floats on top of it -->
+  <arcgis-scene basemap="dark-gray-vector" ground="world-elevation"></arcgis-scene>
+
+  <!-- Title bar (top-left) -->
+  <header class="glass" id="title">
+    <div><h1>KALIMANTAN WILDFIRE COMMAND CENTER</h1>
+    <p>Peatland groundwater (TMAT) · VIIRS hotspots · Wind · Spread risk</p></div>
+    <span id="liveBadge">● LIVE</span>
+  </header>
+
+  <!-- Side dashboard (right) -->
+  <aside class="glass" id="panel">
+    <div class="cards">
+      <div class="card"><label>Active hotspots</label><b id="kHot">–</b></div>
+      <div class="card"><label>Avg TMAT level</label><b id="kTma">–</b><small>cm</small></div>
+      <div class="card"><label>Wind</label><b id="kWind">–</b><small id="kDir"></small></div>
+    </div>
+
+    <h2>Water table – last 7 days vs thresholds</h2>
+    <div id="chartBox"><canvas id="chart"></canvas></div>
+
+    <h2>Wildfire spread risk <span id="riskLevel">–</span></h2>
+    <div class="matrix" id="matrix"></div>
+    <p class="axis">↑ drier peat &nbsp; → more hotspots</p>
+
+    <h2>Alert ticker</h2>
+    <ul id="ticker"></ul>
+
+    <p class="note">TMAT locations &amp; 7-day history: real SiTMAT data (KLH). Live telemetry, hotspots and fire footprint are <b>simulated</b>. Wind flow: Esri Living Atlas, October surface-wind average (climatology, not live).</p>
+  </aside>
+
+  <!-- Playback bar (bottom) -->
+  <footer class="glass" id="timeline">
+    <button id="play">▶</button>
+    <select id="speed"><option value="1">1×</option><option value="4">4×</option><option value="16">16×</option></select>
+    <input id="slider" type="range" min="0" max="1000" value="1000">
+    <span id="timeLabel">Now</span>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
