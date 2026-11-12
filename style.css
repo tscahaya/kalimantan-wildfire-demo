@@ -1,57 +1,27 @@
-/* ---------- Base: map fills the page, dark background ---------- */
-html, body { margin: 0; height: 100%; background: #050a12; color: #dbe7f3;
-  font-family: "Segoe UI", system-ui, sans-serif; overflow: hidden; }
-arcgis-scene { position: absolute; inset: 0; }
+/* Only small layout helpers – all colours/fonts come from Calcite's CSS variables (dark mode). */
+html, body { margin: 0; height: 100%; }
+calcite-shell { height: 100%; }
+arcgis-scene { width: 100%; height: 100%; }
 
-/* ---------- "Glass" look: translucent + blurred background ---------- */
-.glass { position: absolute; background: rgba(10, 20, 34, .55);
-  backdrop-filter: blur(14px) saturate(140%); -webkit-backdrop-filter: blur(14px) saturate(140%);
-  border: 1px solid rgba(120, 200, 255, .22); border-radius: 14px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, .45), inset 0 0 20px rgba(60, 160, 255, .06); }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--calcite-spacing-sm); padding: var(--calcite-spacing-md); }
+.stats div { background: var(--calcite-color-foreground-2); border: 1px solid var(--calcite-color-border-3);
+  border-radius: var(--calcite-corner-radius-sharp, 4px); padding: var(--calcite-spacing-sm); text-align: center; }
+.stats label { display: block; font-size: var(--calcite-font-size--3); color: var(--calcite-color-text-3); text-transform: uppercase; }
+.stats b { font-size: var(--calcite-font-size-3); color: var(--calcite-color-brand); }
+.stats small { display: block; font-size: var(--calcite-font-size--3); color: var(--calcite-color-text-3); }
+#chartBox { height: 170px; }
 
-/* ---------- Title bar ---------- */
-#title { top: 18px; left: 18px; padding: 12px 18px; display: flex; gap: 18px; align-items: center; }
-#title h1 { margin: 0; font-size: 15px; letter-spacing: .16em; color: #fff; }
-#title p { margin: 3px 0 0; font-size: 11px; color: #8fb3d1; }
-#liveBadge { color: #ff4d4d; font-weight: 700; font-size: 12px; animation: blink 1.4s infinite; }
-#liveBadge.replay { color: #ffc14d; animation: none; }
-@keyframes blink { 50% { opacity: .35; } }
+.lrow { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px; padding: 6px 0;
+  border-bottom: 1px solid var(--calcite-color-border-3); }
+.lrow calcite-slider { grid-column: 1 / 2; }
+.lrow .mv { grid-row: 1 / 3; grid-column: 2; display: flex; flex-direction: column; }
 
-/* ---------- Right-hand dashboard ---------- */
-#panel { top: 18px; right: 18px; bottom: 96px; width: 340px; padding: 16px; overflow-y: auto; }
-#panel h2 { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #8fb3d1;
-  margin: 16px 0 8px; display: flex; justify-content: space-between; }
-.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.card { background: rgba(255, 255, 255, .05); border: 1px solid rgba(120, 200, 255, .15);
-  border-radius: 10px; padding: 9px 8px; text-align: center; }
-.card label { display: block; font-size: 9px; color: #8fb3d1; text-transform: uppercase; letter-spacing: .08em; }
-.card b { font-size: 24px; color: #5eead4; }
-.card small { display: block; font-size: 10px; color: #8fb3d1; }
-#chartBox { height: 150px; }
+.pb { display: flex; align-items: center; gap: var(--calcite-spacing-md); padding: var(--calcite-spacing-sm) var(--calcite-spacing-lg); }
+.pb calcite-slider { flex: 1; }
+#timeLabel { min-width: 70px; text-align: right; font-size: var(--calcite-font-size--1); }
 
-/* Risk matrix: 3x3 grid, the active cell glows */
-.matrix { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
-.matrix div { height: 26px; border-radius: 5px; opacity: .3; }
-.matrix div.on { opacity: 1; outline: 2px solid #fff; box-shadow: 0 0 14px currentColor; }
-.s0 { background: #22c55e; color: #22c55e; } .s1 { background: #a3e635; color: #a3e635; }
-.s2 { background: #facc15; color: #facc15; } .s3 { background: #fb923c; color: #fb923c; }
-.s4 { background: #ef4444; color: #ef4444; }
-.axis { font-size: 10px; color: #6f90ac; margin: 4px 0 0; }
-#riskLevel { font-weight: 700; color: #fb923c; }
-
-/* Alert ticker */
-#ticker { list-style: none; margin: 0; padding: 0; font-size: 12px; }
-#ticker li { padding: 6px 8px; margin-bottom: 4px; border-left: 3px solid #5eead4;
-  background: rgba(255, 255, 255, .04); border-radius: 4px; }
-#ticker li.warn { border-color: #fb923c; } #ticker li.crit { border-color: #ef4444; }
-.note { font-size: 10px; color: #6f90ac; margin-top: 14px; }
-
-/* ---------- Playback bar ---------- */
-#timeline { left: 18px; right: 380px; bottom: 18px; padding: 12px 18px; display: flex; gap: 14px; align-items: center; }
-#timeline button, #timeline select { background: rgba(94, 234, 212, .15); color: #5eead4;
-  border: 1px solid rgba(94, 234, 212, .4); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
-#slider { flex: 1; accent-color: #5eead4; }
-#timeLabel { min-width: 120px; font-size: 12px; text-align: right; color: #cfe4f7; }
-
-/* Narrow screens: dashboard overlaps less */
-@media (max-width: 900px) { #panel { width: 260px; } #timeline { right: 18px; bottom: 18px; } }
+/* Popup content for the Area Threat Analysis card */
+.threat { font-size: 13px; line-height: 1.45; }
+.threat table { width: 100%; border-collapse: collapse; margin: 6px 0; }
+.threat td { padding: 2px 4px; border-bottom: 1px solid rgba(127,127,127,.3); }
+.threat .hi { color: #ef4444; font-weight: 600; } .threat .md { color: #f59e0b; font-weight: 600; } .threat .lo { color: #22c55e; font-weight: 600; }
