@@ -25,3 +25,25 @@ arcgis-scene { width: 100%; height: 100%; }
 .threat table { width: 100%; border-collapse: collapse; margin: 6px 0; }
 .threat td { padding: 2px 4px; border-bottom: 1px solid rgba(127,127,127,.3); }
 .threat .hi { color: #ef4444; font-weight: 600; } .threat .md { color: #f59e0b; font-weight: 600; } .threat .lo { color: #22c55e; font-weight: 600; }
+
+/* ---------- Floating layout (rounded cards over the map) ---------- */
+[hidden] { display: none !important; }
+#stage { position: relative; width: 100%; height: 100%; }
+.hdr { display: flex; flex-wrap: wrap; align-items: center; gap: var(--calcite-spacing-sm); padding: 0 var(--calcite-spacing-md); }
+.float { pointer-events: auto; border-radius: 14px; overflow: hidden; background: var(--calcite-color-foreground-1);
+  border: 1px solid var(--calcite-color-border-3); box-shadow: 0 8px 28px rgba(0, 0, 0, .55); }
+#left { position: absolute; z-index: 5; top: 12px; left: 12px; bottom: 76px; width: 390px; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
+#tabsBar { flex: 0 0 auto; }
+#tabPanels { flex: 1 1 0; min-height: 0; display: flex; }
+#tickerBox { flex: 0 0 210px; display: flex; }
+#tabPanels calcite-panel, #tickerBox calcite-panel { width: 100%; height: 100%; }
+#pbBox { position: absolute; z-index: 5; left: 414px; right: 70px; bottom: 14px; }
+.hint { display: block; margin-top: 6px; color: var(--calcite-color-text-3); }
+
+/* Wildfire spread risk matrix: rows = peat dryness, columns = hotspot count; active cell glows */
+.matrix { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.matrix div { height: 24px; border-radius: 6px; opacity: .3; }
+.matrix div.on { opacity: 1; outline: 2px solid #fff; box-shadow: 0 0 14px currentColor; }
+.s0 { background: #22c55e; color: #22c55e; } .s1 { background: #a3e635; color: #a3e635; } .s2 { background: #facc15; color: #facc15; }
+.s3 { background: #fb923c; color: #fb923c; } .s4 { background: #ef4444; color: #ef4444; }
+.axis { font-size: var(--calcite-font-size--2); color: var(--calcite-color-text-3); margin: 4px 0 0; }

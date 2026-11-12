@@ -4,81 +4,89 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Kalimantan Wildfire Command Center</title>
-  <!-- ArcGIS Maps SDK for JavaScript 5.1. It also loads the Calcite Design System components
-       (calcite-shell, calcite-panel, ...) automatically, so no separate Calcite tag is needed. -->
+  <!-- ArcGIS Maps SDK for JavaScript 5.1 (also loads the Calcite Design System components automatically) -->
   <script type="module" src="https://js.arcgis.com/5.1/"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <link rel="stylesheet" href="style.css">
 </head>
-<!-- calcite-mode-dark = Calcite's official dark theme -->
 <body class="calcite-mode-dark">
 <calcite-shell>
+  <!-- HEADER: title + the three data filters + live/replay badge -->
   <calcite-navigation slot="header">
     <calcite-navigation-logo slot="logo" heading="Kalimantan Wildfire Command Center"
       description="Peatland TMAT · VIIRS hotspots · Wind flow"></calcite-navigation-logo>
-    <calcite-chip slot="content-end" id="live" kind="danger" scale="s" appearance="solid">LIVE</calcite-chip>
+    <div slot="content-end" class="hdr">
+      <calcite-select id="fProv" scale="s" width="auto" label="Region"><calcite-option value="">All Kalimantan</calcite-option></calcite-select>
+      <calcite-select id="fConf" scale="s" width="auto" label="Hotspot confidence">
+        <calcite-option value="">All confidence levels</calcite-option><calcite-option value="high">High confidence</calcite-option>
+        <calcite-option value="nominal">Nominal / low</calcite-option></calcite-select>
+      <calcite-select id="fStatus" scale="s" width="auto" label="TMAT status">
+        <calcite-option value="">All TMAT status</calcite-option><calcite-option value="Normal">Normal (wet)</calcite-option>
+        <calcite-option value="Dry">Dry – watch</calcite-option><calcite-option value="Critical">Critical</calcite-option></calcite-select>
+      <calcite-button id="fReset" scale="s" appearance="outline" icon-start="reset">Reset</calcite-button>
+      <calcite-chip id="live" kind="danger" scale="s" appearance="solid">LIVE</calcite-chip>
+    </div>
   </calcite-navigation>
 
-  <!-- Left side: action bar (tabs) + one panel per tab -->
-  <calcite-shell-panel slot="panel-start" id="shellPanel" display-mode="float" width-scale="m">
-    <calcite-action-bar slot="action-bar">
-      <calcite-action data-panel="p-overview" text="Overview" icon="graph-time-series" active></calcite-action>
-      <calcite-action data-panel="p-layers" text="Layers" icon="layers"></calcite-action>
-      <calcite-action data-panel="p-filters" text="Filters" icon="filter"></calcite-action>
-      <calcite-action data-panel="p-alerts" text="Alerts" icon="exclamation-mark-triangle"></calcite-action>
-    </calcite-action-bar>
+  <div id="stage">
+    <!-- 3D MAP + Esri scene tools (search, layer list, legend, measurement, navigation) -->
+    <arcgis-scene basemap="dark-gray-vector" ground="world-elevation">
+      <arcgis-search slot="top-right"></arcgis-search>
+      <arcgis-expand slot="top-right" expand-tooltip="Layer visibility"><arcgis-layer-list></arcgis-layer-list></arcgis-expand>
+      <arcgis-expand slot="top-right" expand-tooltip="Legend"><arcgis-legend></arcgis-legend></arcgis-expand>
+      <arcgis-expand slot="top-right" expand-tooltip="Measure distance"><arcgis-direct-line-measurement-3d></arcgis-direct-line-measurement-3d></arcgis-expand>
+      <arcgis-expand slot="top-right" expand-tooltip="Measure area"><arcgis-area-measurement-3d></arcgis-area-measurement-3d></arcgis-expand>
+      <arcgis-zoom slot="bottom-right"></arcgis-zoom>
+      <arcgis-compass slot="bottom-right"></arcgis-compass>
+      <arcgis-navigation-toggle slot="bottom-right"></arcgis-navigation-toggle>
+    </arcgis-scene>
 
-    <calcite-panel id="p-overview" heading="Situation overview">
-      <div class="stats">
-        <div><label>Active hotspots</label><b id="kHot">–</b></div>
-        <div><label>Avg TMAT (cm)</label><b id="kTma">–</b></div>
-        <div><label>Wind</label><b id="kWind">–</b><small id="kDir"></small></div>
+    <!-- FLOATING LEFT COLUMN: tabs, tab content, always-visible alert ticker -->
+    <div id="left">
+      <div class="float" id="tabsBar">
+        <calcite-action-bar layout="horizontal" expand-disabled text-enabled>
+          <calcite-action data-panel="p-overview" text="Overview" icon="graph-time-series" active></calcite-action>
+          <calcite-action data-panel="p-layers" text="Layers" icon="layers"></calcite-action>
+        </calcite-action-bar>
       </div>
-      <calcite-notice id="risk" open icon="exclamation-mark-triangle" kind="warning" width="full">
-        <div slot="title">Wildfire spread risk: <span id="riskLevel">–</span></div>
-        <div slot="message" id="riskMsg"></div>
-      </calcite-notice>
-      <calcite-block heading="Water table – 7 days vs thresholds" collapsible expanded icon-start="graph-time-series">
-        <div id="chartBox"><canvas id="chart"></canvas></div>
-      </calcite-block>
-      <calcite-notice open icon="information" width="full">
-        <div slot="message">Real: SiTMAT station locations &amp; 7-day history (KLH). Simulated: live telemetry, hotspots,
-          fire footprint, infrastructure. Wind: Esri Living Atlas October average (not live).
-          Click the fire footprint or a peatland unit for a threat analysis.</div>
-      </calcite-notice>
-    </calcite-panel>
 
-    <calcite-panel id="p-layers" heading="Layers" hidden>
-      <calcite-block heading="Operational layers" collapsible expanded icon-start="layers"
-        description="Toggle, fade and re-order (arrows move a layer up / down)">
-        <div id="layerList"></div>
-      </calcite-block>
-    </calcite-panel>
+      <div class="float" id="tabPanels">
+        <calcite-panel id="p-overview" heading="Situation overview">
+          <div class="stats">
+            <div><label>Active hotspots</label><b id="kHot">–</b></div>
+            <div><label>Avg TMAT (cm)</label><b id="kTma">–</b></div>
+            <div><label>Wind</label><b id="kWind">–</b><small id="kDir"></small></div>
+          </div>
+          <calcite-block id="riskBlock" heading="Wildfire spread risk" collapsible expanded icon-start="exclamation-mark-triangle">
+            <div class="matrix" id="matrix"></div>
+            <p class="axis">↑ drier peat &nbsp; → more hotspots</p>
+          </calcite-block>
+          <calcite-block id="wtBlock" heading="Water table – 7 days vs thresholds" collapsible expanded icon-start="graph-time-series">
+            <calcite-button id="clearSel" appearance="outline" scale="s" icon-start="x" hidden>Show all sensors</calcite-button>
+            <div id="chartBox"><canvas id="chart"></canvas></div>
+            <small class="hint">Tip: click a sensor column on the map to chart that sensor alone.</small>
+          </calcite-block>
+          <calcite-notice open icon="information" width="full">
+            <div slot="message">Real: SiTMAT station locations &amp; 7-day history (KLH). Simulated: live telemetry, hotspots, fire footprint,
+              infrastructure. Wind: Esri Living Atlas October average (not live).</div>
+          </calcite-notice>
+        </calcite-panel>
 
-    <calcite-panel id="p-filters" heading="Filters" hidden>
-      <calcite-block heading="Data filters" expanded icon-start="filter">
-        <calcite-label>Region / province<calcite-select id="fProv"><calcite-option value="">All Kalimantan</calcite-option></calcite-select></calcite-label>
-        <calcite-label>Hotspot confidence<calcite-select id="fConf">
-          <calcite-option value="">All</calcite-option><calcite-option value="high">High</calcite-option>
-          <calcite-option value="nominal">Nominal / low</calcite-option></calcite-select></calcite-label>
-        <calcite-label>TMAT status<calcite-select id="fStatus">
-          <calcite-option value="">All</calcite-option><calcite-option value="Normal">Normal (wet)</calcite-option>
-          <calcite-option value="Dry">Dry – watch</calcite-option><calcite-option value="Critical">Critical</calcite-option></calcite-select></calcite-label>
-        <calcite-button id="fReset" appearance="outline" width="full">Reset filters</calcite-button>
-      </calcite-block>
-    </calcite-panel>
+        <calcite-panel id="p-layers" heading="Layers" hidden>
+          <calcite-block heading="Operational layers" collapsible expanded icon-start="layers"
+            description="Toggle, fade and re-order (arrows move a layer up / down)">
+            <div id="layerList"></div>
+          </calcite-block>
+        </calcite-panel>
+      </div>
 
-    <calcite-panel id="p-alerts" heading="Alert ticker" description="Click an alert to zoom to it" hidden>
-      <calcite-list id="alerts"></calcite-list>
-    </calcite-panel>
-  </calcite-shell-panel>
+      <div class="float" id="tickerBox">
+        <calcite-panel heading="Alert ticker" description="Click an alert to zoom to it"><calcite-list id="alerts"></calcite-list></calcite-panel>
+      </div>
+    </div>
 
-  <!-- The 3D map -->
-  <arcgis-scene basemap="dark-gray-vector" ground="world-elevation"></arcgis-scene>
-
-  <!-- Bottom: playback bar -->
-  <calcite-shell-center-row slot="center-row" position="end">
-    <calcite-panel id="playback">
+    <!-- FLOATING BOTTOM: playback -->
+    <div class="float" id="pbBox">
       <div class="pb">
         <calcite-button id="play" icon-start="play" kind="brand" scale="s" label="Play"></calcite-button>
         <calcite-select id="speed" scale="s" label="Speed" width="auto">
@@ -87,8 +95,8 @@
         <calcite-slider id="slider" min="0" max="1000" value="1000" label="Time"></calcite-slider>
         <span id="timeLabel">Now</span>
       </div>
-    </calcite-panel>
-  </calcite-shell-center-row>
+    </div>
+  </div>
 </calcite-shell>
 <script type="module" src="app.js"></script>
 </body>

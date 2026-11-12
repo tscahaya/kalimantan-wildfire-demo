@@ -8,11 +8,11 @@
    Sections: 1 Setup · 2 Data & layers · 3 Simulation · 4 Threat analysis · 5 UI · 6 Loop
    ===================================================================== */
 (async () => {
-const [FeatureLayer, GeoJSONLayer, GraphicsLayer, Graphic, ImageryTileLayer, DimensionalDefinition, Camera, Extent, Point] =
+const [FeatureLayer, GeoJSONLayer, GraphicsLayer, Graphic, ImageryTileLayer, DimensionalDefinition, Camera, Extent, Point, TileLayer] =
   await $arcgis.import(["@arcgis/core/layers/FeatureLayer.js", "@arcgis/core/layers/GeoJSONLayer.js",
     "@arcgis/core/layers/GraphicsLayer.js", "@arcgis/core/Graphic.js", "@arcgis/core/layers/ImageryTileLayer.js",
     "@arcgis/core/layers/support/DimensionalDefinition.js", "@arcgis/core/Camera.js",
-    "@arcgis/core/geometry/Extent.js", "@arcgis/core/geometry/Point.js"]);
+    "@arcgis/core/geometry/Extent.js", "@arcgis/core/geometry/Point.js", "@arcgis/core/layers/TileLayer.js"]);
 
 const $ = id => document.getElementById(id);
 const set = (id, v) => { const e = $(id); if (e.textContent !== String(v)) e.textContent = v; };   // write DOM only if changed
@@ -28,7 +28,9 @@ const viewEl = document.querySelector("arcgis-scene");
 await viewEl.viewOnReady();
 const view = viewEl.view, map = viewEl.map;
 view.qualityProfile = "medium";   // lighter 3D rendering = higher FPS
-view.environment = { atmosphereEnabled: false, starsEnabled: false, background: { type: "color", color: "#050a12" } };
+view.environment = { atmosphereEnabled: false, starsEnabled: false, background: { type: "color", color: "#050a12" },
+  lighting: { type: "sun", date: new Date(Date.UTC(2026, 9, 15, 1, 0)), directShadowsEnabled: false } };   // low morning sun = visible relief
+map.ground = "world-elevation";   // real terrain; draped layers and the wind flow follow it
 const HOME = new Camera({ position: { longitude: 111.8, latitude: -5.8, z: 420000 }, tilt: 55, heading: 0 });
 viewEl.camera = HOME;
 
@@ -79,7 +81,7 @@ const top = H.reduce((a, h) => h.frp > a.frp ? h : a), origin = new Point({ long
 
 // 2c) PEATLAND UNITS (KHG), coloured by median water level of their sensors.
 const khg = new GeoJSONLayer({
-  url: "data/khg_kalimantan.geojson", title: "KHG",
+  url: "data/khg_kalimantan.geojson", title: "KHG", outFields: ["*"],
   renderer: { type: "simple", symbol: { type: "polygon-3d", symbolLayers: [{ type: "fill",
       material: { color: [120, 120, 120, 0.15] }, outline: { color: [255, 255, 255, 0.3], size: 0.6 } }] },
     visualVariables: [{ type: "color", field: "median_cm", stops: [{ value: -100, color: [255, 45, 45, 0.38] },
@@ -111,19 +113,21 @@ const WIND_URL = "https://tiledimageservices.arcgis.com/P3ePLMYs2RVChkJx/arcgis/
 const windDef = [new DimensionalDefinition({ variableName: "Vector-MagDir", dimensionName: "StdPressure", values: [100000], isSlice: true }),
   new DimensionalDefinition({ variableName: "Vector-MagDir", dimensionName: "StdTime", values: [10], isSlice: true })];   // surface, October
 const windFlow = new ImageryTileLayer({ url: WIND_URL, title: "Wind flow", multidimensionalDefinition: windDef,
-  elevationInfo: { mode: "relative-to-ground", offset: 1500 },
+  elevationInfo: { mode: "relative-to-ground", offset: 800 },
   renderer: { type: "flow", density: 0.5, trailLength: 20, maxPathLength: 40, flowSpeed: 3, trailWidth: 2,   // lighter than before = less GPU work
     visualVariables: [{ type: "color", field: "Magnitude", stops: [{ value: 0, color: [30, 120, 255, 1] }, { value: 2, color: [34, 211, 238, 1] },
       { value: 4, color: [94, 234, 212, 1] }, { value: 7, color: [232, 255, 138, 1] }, { value: 12, color: [255, 255, 255, 1] }] }] } });
 
+// Terrain hillshade (draped on the ground) makes relief readable under the dark basemap.
+const hill = new TileLayer({ url: "https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer", title: "Terrain hillshade", opacity: 0.3 });
 // Draw order, bottom -> top. The Layers panel can change it.
-const ORDER = [khg, windFlow, infra, fireLayer, tmat, hot];
-const NAMES = new Map([[khg, "Peatland hydrological units (KHG)"], [windFlow, "Wind flow"], [infra, "Critical infrastructure (sim)"],
+const ORDER = [hill, khg, windFlow, infra, fireLayer, tmat, hot];
+const NAMES = new Map([[hill, "Terrain hillshade"], [khg, "Peatland hydrological units (KHG)"], [windFlow, "Wind flow"], [infra, "Critical infrastructure (sim)"],
   [fireLayer, "Fire footprint"], [tmat, "TMAT groundwater sensors"], [hot, "VIIRS hotspots"]]);
 map.addMany(ORDER);
 
 // ---------- 3) SIMULATION STATE ----------
-let T = 1, playing = false, windFrom = 225, windSpeed = 14, realWind = null, lastKey = -1, opHot = 1;   // T: 0 = 48 h ago … 1 = now
+let T = 1, playing = false, windFrom = 225, windSpeed = 14, realWind = null, lastKey = -1, opHot = 1, selSensor = -1;   // T: 0 = 48 h ago … 1 = now
 const F = { prov: "", conf: "", status: "" };                                                          // active filters
 const fire = { a: 2, b: 1, off: 1, a24: 12, b24: 6, off24: 8, to: 45 };
 const sel = () => S.map((s, i) => i).filter(i => (!F.prov || S[i].prov === F.prov) && (!F.status || statusOf(cur[i]) === F.status));
@@ -159,11 +163,11 @@ function applyTime() {
 function stats() {
   const ago = 48 * (1 - T), idx = sel(), avg = idx.length ? idx.reduce((s, i) => s + cur[i], 0) / idx.length : NaN;
   const n = H.filter(h => h.ago >= ago && (!F.prov || h.prov === F.prov) && (!F.conf || h.conf === F.conf)).length;
-  set("kHot", n); set("kTma", isNaN(avg) ? "–" : avg.toFixed(1)); set("kWind", Math.round(windSpeed));
+  set("kHot", n); const cv = selSensor >= 0 ? cur[selSensor] : avg; set("kTma", isNaN(cv) ? "–" : cv.toFixed(1)); set("kWind", Math.round(windSpeed));
   set("kDir", "km/h from " + compass(windFrom) + (realWind ? " (Oct avg)" : ""));
-  const sc = (avg > -40 ? 0 : avg > -70 ? 1 : 2) + (n < 8 ? 0 : n < 20 ? 1 : 2);
-  $("risk").kind = ["success", "success", "warning", "danger", "danger"][sc];
-  set("riskLevel", ["LOW", "LOW", "MODERATE", "HIGH", "EXTREME"][sc]); set("riskMsg", `Peat water table ${isNaN(avg) ? "–" : avg.toFixed(0)} cm · ${n} active hotspots`);
+  const rr = isNaN(avg) || avg > -40 ? 0 : avg > -70 ? 1 : 2, cc = n < 8 ? 0 : n < 20 ? 1 : 2, sc = rr + cc;
+  [...$("matrix").children].forEach(d => d.classList.toggle("on", +d.dataset.r === rr && +d.dataset.c === cc));
+  $("riskBlock").description = `${["LOW", "LOW", "MODERATE", "HIGH", "EXTREME"][sc]} · peat ${isNaN(avg) ? "–" : avg.toFixed(0)} cm · ${n} hotspots`;
 }
 
 // Telemetry: ONE batched applyEdits every 5 s (was per-100ms work before).
@@ -192,19 +196,22 @@ function threat(kind, at) {
       return { n: a.name, edge, eta }; }).sort((p, q) => p.eta - q.eta).slice(0, 4)
       .map(a => `<tr><td>${a.n}</td><td>${a.edge.toFixed(0)} km</td><td>${a.eta < 1 ? "<1" : a.eta.toFixed(0)} h</td><td class="${a.eta < 6 ? "hi" : a.eta < 24 ? "md" : "lo"}">${a.eta < 6 ? "HIGH" : a.eta < 24 ? "MEDIUM" : "LOW"}</td></tr>`).join("") + "</table>";
   } else {
-    const m = at.median_cm, cls = m == null ? "no sensor data" : m < -80 ? "critical" : m < -40 ? "dry – elevated" : "wet – low";
-    html += `<b>Peat unit area:</b> ${Math.round(at.area_ha).toLocaleString()} ha (${at.prov})<br><b>Median water table:</b> ${m == null ? "–" : m + " cm"} → fire risk <b>${cls}</b><br>`;
-    html += `<b>Hectares at elevated risk:</b> ${m != null && m < -40 ? Math.round(at.area_ha).toLocaleString() : 0} ha<br><b>Spread if ignited:</b> ~${ros.toFixed(1)} km/h toward ${compass(fire.to)}<br>Sensors in unit: ${at.n_stations}`;
+    const m = at.median_cm == null ? null : Number(at.median_cm), ha = Number(at.area_ha) || 0, ns = Number(at.n_stations) || 0;
+    const cls = m == null ? "no recent sensor data" : m < -80 ? "critical" : m < -40 ? "dry – elevated" : "wet – low";
+    const nh = H.filter(h => h.prov === at.prov && h.ago >= 48 * (1 - T)).length;
+    html += `<b>Peat unit area:</b> ${Math.round(ha).toLocaleString()} ha (${REG[at.prov] || at.prov || "–"})<br><b>Median water table:</b> ${m == null ? "–" : m + " cm"} → fire risk <b>${cls}</b><br>`;
+    html += `<b>Hectares at elevated risk:</b> ${m != null && m < -40 ? Math.round(ha).toLocaleString() : 0} ha<br><b>Spread if ignited:</b> ~${ros.toFixed(1)} km/h toward ${compass(fire.to)}<br>Sensors in unit: ${ns} · active hotspots in province: ${nh}`;
   }
   el.innerHTML = html + "<br><small>Simulated estimate for demonstration.</small>"; return el;
 }
 
 // ---------- 5) CALCITE UI ----------
 // 5a) Tabs (action bar). Clicking the active tab again collapses the side panel.
-const acts = [...document.querySelectorAll("calcite-action[data-panel]")], sp = $("shellPanel");
-acts.forEach(a => a.addEventListener("click", () => {
-  if (a.active && !sp.collapsed) { sp.collapsed = true; a.active = false; return; }
-  sp.collapsed = false; acts.forEach(x => { x.active = x === a; $(x.dataset.panel).hidden = x !== a; }); }));
+const acts = [...document.querySelectorAll("calcite-action[data-panel]")];
+const showTab = id => { $("tabPanels").hidden = false; acts.forEach(x => { x.active = x.dataset.panel === id; $(x.dataset.panel).hidden = x.dataset.panel !== id; }); };
+acts.forEach(a => a.addEventListener("click", () => {            // clicking the active tab again hides the tab card
+  if (a.active && !$("tabPanels").hidden) { $("tabPanels").hidden = true; a.active = false; return; }
+  showTab(a.dataset.panel); }));
 
 // 5b) Layers widget: visibility checkbox, opacity slider, up/down ordering.
 function drawLayers() {
@@ -227,6 +234,7 @@ drawLayers();
 [...new Set(S.map(s => s.prov))].sort().forEach(p => { const o = document.createElement("calcite-option"); o.value = p; o.label = REG[p] || p; $("fProv").appendChild(o); });
 const q = v => v ? `prov = '${v}'` : "";
 function applyFilters(zoom) {
+  selSensor = -1;                                  // changing a filter clears the single-sensor selection
   hot.definitionExpression = hotExpr(48 * (1 - T));
   tmat.definitionExpression = [q(F.prov), F.status && `cur_status = '${F.status}'`].filter(Boolean).join(" AND ") || "1=1";
   khg.definitionExpression = q(F.prov) || "1=1";
@@ -258,9 +266,29 @@ const chart = new Chart($("chart"), { type: "line",
     { label: "Critical -80", data: DAYS.map(() => -80), borderColor: "#ef4444", borderDash: [5, 4], pointRadius: 0, borderWidth: 1 }] },
   options: { maintainAspectRatio: false, animation: false, plugins: { legend: { labels: { color: "#9db8d0", boxWidth: 12, font: { size: 10 } } } },
     scales: { x: { ticks: { color: "#7f9bb5", font: { size: 9 } } }, y: { ticks: { color: "#7f9bb5", font: { size: 9 } } } } } });
-function updateChart() { const idx = sel();
-  chart.data.datasets[0].data = DAYS.map((_, k) => idx.length ? +(idx.reduce((s, i) => s + (k < 7 ? S[i].series[k] : cur[i]), 0) / idx.length).toFixed(1) : null);
+function updateChart() {
+  const one = selSensor >= 0, idx = one ? [selSensor] : sel();       // one clicked sensor, or every sensor passing the filters
+  chart.data.datasets[0].label = one ? `Sensor ${S[selSensor].id} (cm)` : "Avg TMAT (cm)";
+  chart.data.datasets[0].data = DAYS.map((_, k) => idx.length ? +(idx.reduce((t, i) => t + (k < 7 ? S[i].series[k] : cur[i]), 0) / idx.length).toFixed(1) : null);
+  $("wtBlock").heading = one ? `Water table – sensor ${S[selSensor].id}` : "Water table – 7 days vs thresholds"; $("clearSel").hidden = !one;
   chart.update("none"); }
+
+// 5e2) Risk matrix grid (rows = peat dryness, columns = hotspot count)
+for (let r = 2; r >= 0; r--) for (let c = 0; c < 3; c++) { const d = document.createElement("div"); d.className = "s" + (r + c); d.dataset.r = r; d.dataset.c = c; $("matrix").appendChild(d); }
+
+// 5e3) Click a TMAT column -> chart + card show that sensor only (the default popup still opens too)
+view.on("click", async e => {
+  const hit = (await view.hitTest(e, { include: [tmat] })).results.find(x => (x.graphic && x.graphic.layer === tmat) || x.layer === tmat);
+  if (!hit) return;
+  selSensor = S.findIndex(s => s.id === hit.graphic.attributes.sensor_id); showTab("p-overview"); updateChart(); stats(); });
+$("clearSel").addEventListener("click", () => { selSensor = -1; updateChart(); stats(); });
+
+// 5e4) Search tool: look up peatland units and sensors by name (default geocoder needs an API key, so it is off)
+try { const se = document.querySelector("arcgis-search"); if (se.componentOnReady) await se.componentOnReady();
+  se.includeDefaultSources = false;
+  se.sources = [{ layer: khg, searchFields: ["name"], displayField: "name", exactMatch: false, outFields: ["*"], name: "Peatland units", placeholder: "Search peatland unit" },
+    { layer: tmat, filter: { where: "slice = 7" }, searchFields: ["sensor_id", "name"], displayField: "sensor_id", exactMatch: false, outFields: ["*"], name: "TMAT sensors", placeholder: "Search sensor ID" }];
+} catch (err) { console.warn("Search sources not set", err); }
 
 // 5f) Playback controls
 $("play").addEventListener("click", () => { playing = !playing; if (playing && T >= .999) T = 0; $("play").iconStart = playing ? "pause" : "play"; });
