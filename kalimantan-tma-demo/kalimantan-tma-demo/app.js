@@ -28,8 +28,7 @@ const viewEl = document.querySelector("arcgis-scene");
 await viewEl.viewOnReady();
 const view = viewEl.view, map = viewEl.map;
 view.qualityProfile = "medium";   // lighter 3D rendering = higher FPS
-view.environment = { atmosphereEnabled: false, starsEnabled: false, background: { type: "color", color: "#050a12" },
-  lighting: { type: "sun", date: new Date(Date.UTC(2026, 9, 15, 1, 0)), directShadowsEnabled: false } };   // low morning sun = visible relief
+view.environment = { atmosphereEnabled: false, starsEnabled: false, background: { type: "color", color: "#1a2736" }, lighting: { type: "virtual" } };   // virtual light = bright, un-shaded symbol colours
 map.ground = "world-elevation";   // real terrain; draped layers and the wind flow follow it
 const HOME = new Camera({ position: { longitude: 111.8, latitude: -5.8, z: 420000 }, tilt: 55, heading: 0 });
 viewEl.camera = HOME;
@@ -53,9 +52,9 @@ const tmat = new FeatureLayer({
     ["day", "string"], ["water_cm", "double"], ["cur_status", "string"], ["battery", "integer"]].map(([name, type]) => ({ name, type })),
   renderer: { type: "simple",
     symbol: { type: "point-3d", symbolLayers: [{ type: "object", resource: { primitive: "cylinder" }, anchor: "bottom",
-      width: 3200, height: 2100, depth: 3200, material: { color: "#22d3ee" } }] },
-    visualVariables: [{ type: "color", field: "water_cm", stops: [{ value: -100, color: "#ff2d2d" },
-      { value: -80, color: "#ff7a1a" }, { value: -40, color: "#ffd23f" }, { value: 0, color: "#22d3ee" }] }] },
+      width: 3600, height: 2100, depth: 3600, material: { color: "#22d3ee" } }] },
+    visualVariables: [{ type: "color", field: "water_cm", stops: [{ value: -100, color: "#ff1744" },
+      { value: -80, color: "#ff6d00" }, { value: -40, color: "#ffea00" }, { value: 0, color: "#00e5ff" }] }] },
   popupTemplate: { title: "TMAT {sensor_id} – {day}", content: "<b>{name}</b><br>Water level that day: <b>{water_cm} cm</b><br>Sensor now: {cur_status}<br>Battery: {battery}%" }
 });
 
@@ -73,8 +72,8 @@ const hot = new FeatureLayer({
   renderer: { type: "simple",
     symbol: { type: "point-3d", symbolLayers: [{ type: "object", resource: { primitive: "sphere" }, width: 2500, height: 2500, depth: 2500, material: { color: [255, 140, 40, 0.8] } }] },
     visualVariables: [
-      { type: "size", field: "frp", valueUnit: "meters", stops: [{ value: 4, size: 1800 }, { value: 94, size: 5200 }] },
-      { type: "color", field: "frp", stops: [{ value: 4, color: [255, 214, 70, 0.8] }, { value: 40, color: [255, 140, 40, 0.85] }, { value: 94, color: [235, 60, 40, 0.9] }] }] },
+      { type: "size", field: "frp", valueUnit: "meters", stops: [{ value: 4, size: 2200 }, { value: 94, size: 6000 }] },
+      { type: "color", field: "frp", stops: [{ value: 4, color: [255, 230, 0, 1] }, { value: 40, color: [255, 120, 0, 1] }, { value: 94, color: [255, 20, 20, 1] }] }] },
   popupTemplate: { title: "VIIRS thermal anomaly", content: "Detected: {time}<br>Fire radiative power: <b>{frp} MW</b><br>Confidence: {conf}<br>Province: {prov}" }
 });
 const top = H.reduce((a, h) => h.frp > a.frp ? h : a), origin = new Point({ longitude: top.lon, latitude: top.lat });
@@ -84,19 +83,30 @@ const khg = new GeoJSONLayer({
   url: "data/khg_kalimantan.geojson", title: "KHG", outFields: ["*"],
   renderer: { type: "simple", symbol: { type: "polygon-3d", symbolLayers: [{ type: "fill",
       material: { color: [120, 120, 120, 0.15] }, outline: { color: [255, 255, 255, 0.3], size: 0.6 } }] },
-    visualVariables: [{ type: "color", field: "median_cm", stops: [{ value: -100, color: [255, 45, 45, 0.38] },
-      { value: -70, color: [255, 140, 30, 0.30] }, { value: -40, color: [250, 210, 60, 0.20] }, { value: 0, color: [40, 200, 230, 0.15] }] }] },
+    visualVariables: [{ type: "color", field: "median_cm", stops: [{ value: -100, color: [255, 45, 45, 0.5] },
+      { value: -70, color: [255, 140, 30, 0.4] }, { value: -40, color: [250, 210, 60, 0.3] }, { value: 0, color: [40, 200, 230, 0.25] }] }] },
   popupTemplate: { title: "Area Threat Analysis – {name}", content: f => threat("khg", f.graphic.attributes) }
 });
 
-// 2d) FIRE FOOTPRINT (red) + 24 h projection (outline) – only 2 graphics; geometry replaced ~8x/s at most.
-const fireLayer = new GraphicsLayer({ title: "Fire footprint" });
-const pop = { title: "Area Threat Analysis – fire footprint", content: () => threat("fire") };
-const footprint = new Graphic({ popupTemplate: pop, symbol: { type: "polygon-3d", symbolLayers: [{ type: "fill",
-  material: { color: [255, 60, 30, 0.4] }, outline: { color: [255, 120, 30, 1], size: 2 } }] } });
+// 2d) FIRE: INITIAL BURN AREA (bright yellow polygon at the ignition point), SIMULATED SPREAD (red polygon that grows
+//     from it) and a 24 h PROJECTION (orange outline). See the "How the fire spread is simulated" card.
+const R0 = 2.2;   // km: approximate radius of the initial burn area
+const cl0 = Math.cos(origin.latitude * Math.PI / 180);
+const burnRing = Array.from({ length: 41 }, (_, k) => { const t = k / 40 * 2 * Math.PI, r = R0 * (1 + .22 * Math.sin(3 * t + 1) + .12 * Math.sin(5 * t + 2));   // irregular scar outline
+  return [origin.longitude + r * Math.sin(t) / (111.3 * cl0), origin.latitude + r * Math.cos(t) / 110.6]; });
+const burnHa = (() => { const p = burnRing.map(([x, y]) => [(x - origin.longitude) * 111.3 * cl0, (y - origin.latitude) * 110.6]); let sum = 0;
+  for (let i = 0; i < p.length - 1; i++) sum += p[i][0] * p[i + 1][1] - p[i + 1][0] * p[i][1]; return Math.abs(sum) / 2 * 100; })();   // shoelace, km² -> ha
+const fireLayer = new GraphicsLayer({ title: "Fire burn area & spread" });
+const pop = { title: "Area Threat Analysis – simulated spread", content: () => threat("fire") };
 const projection = new Graphic({ popupTemplate: pop, symbol: { type: "polygon-3d", symbolLayers: [{ type: "fill",
-  material: { color: [255, 160, 30, 0.08] }, outline: { color: [255, 190, 60, 0.9], size: 1.5 } }] } });
-fireLayer.addMany([projection, footprint]);
+  material: { color: [255, 160, 30, 0.1] }, outline: { color: [255, 190, 60, 1], size: 2 } }] } });
+const footprint = new Graphic({ popupTemplate: pop, symbol: { type: "polygon-3d", symbolLayers: [{ type: "fill",
+  material: { color: [255, 70, 20, 0.6] }, outline: { color: [255, 110, 20, 1], size: 2.5 } }] } });
+const burn = new Graphic({ geometry: { type: "polygon", rings: [burnRing], spatialReference: { wkid: 4326 } },
+  popupTemplate: { title: "Initial burn area", content: () => threat("burn") },
+  symbol: { type: "polygon-3d", symbolLayers: [{ type: "extrude", size: 1200, material: { color: [255, 235, 0, 1] },
+    edges: { type: "solid", color: [255, 255, 140, 1], size: 1.5 } }] } });   // raised yellow slab = the part that "pops"
+fireLayer.addMany([projection, footprint, burn]);
 
 // 2e) CRITICAL INFRASTRUCTURE (simulated) – used for the proximity-risk part of the threat card.
 const assets = ["Settlement", "Trans-Kalimantan road", "Oil-palm mill", "Power substation", "Canal weir", "Airstrip"].map((n, i) => {
@@ -119,11 +129,11 @@ const windFlow = new ImageryTileLayer({ url: WIND_URL, title: "Wind flow", multi
       { value: 4, color: [94, 234, 212, 1] }, { value: 7, color: [232, 255, 138, 1] }, { value: 12, color: [255, 255, 255, 1] }] }] } });
 
 // Terrain hillshade (draped on the ground) makes relief readable under the dark basemap.
-const hill = new TileLayer({ url: "https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer", title: "Terrain hillshade", opacity: 0.3 });
+const hill = new TileLayer({ url: "https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer", title: "Terrain hillshade", opacity: 0.35, visible: false });
 // Draw order, bottom -> top. The Layers panel can change it.
 const ORDER = [hill, khg, windFlow, infra, fireLayer, tmat, hot];
 const NAMES = new Map([[hill, "Terrain hillshade"], [khg, "Peatland hydrological units (KHG)"], [windFlow, "Wind flow"], [infra, "Critical infrastructure (sim)"],
-  [fireLayer, "Fire footprint"], [tmat, "TMAT groundwater sensors"], [hot, "VIIRS hotspots"]]);
+  [fireLayer, "Fire burn area & spread"], [tmat, "TMAT groundwater sensors"], [hot, "VIIRS hotspots"]]);
 map.addMany(ORDER);
 
 // ---------- 3) SIMULATION STATE ----------
@@ -140,6 +150,13 @@ windFlow.load().then(() => windFlow.identify(origin, { multidimensionalDefinitio
 }).catch(() => {});
 windFlow.load().catch(() => pushAlert("Wind service unavailable – wind card is simulated", "warn"));
 
+const dryF = () => { const idx = sel(), avg = idx.length ? idx.reduce((t, i) => t + cur[i], 0) / idx.length : -60; return Math.min(1.5, Math.max(0, (-avg - 40) / 60)); };
+const headROS = () => (0.08 + 0.02 * windSpeed) * (1 + dryF());      // head-fire rate of spread, km/h (grows with wind and peat dryness)
+function spread(t) {   // elliptical fire growth (Huygens' principle) around the initial burn area, t = hours
+  const LB = 1 + 8.729 * Math.pow(1 - Math.exp(-0.03 * windSpeed), 2.155), e = Math.sqrt(LB * LB - 1) / LB;   // length-to-breadth ratio from wind
+  const Rh = headROS(), Rb = Rh * (1 - e) / (1 + e), Rf = (Rh + Rb) / (2 * LB), grow = (Rh + Rb) / 2 * t;
+  return { LB, Rh, Rb, Rf, a: R0 + grow, b: R0 + grow / LB, off: (Rh - Rb) / 2 * t };
+}
 const ellipse = (c, a, b, brg, off) => {   // footprint shape stretched downwind
   const r = brg * Math.PI / 180, ring = [];
   for (let k = 0; k <= 36; k++) { const t = k / 36 * 2 * Math.PI, x = a * Math.cos(t) + off, y = b * Math.sin(t);
@@ -150,10 +167,11 @@ const ellipse = (c, a, b, brg, off) => {   // footprint shape stretched downwind
 function applyTime() {
   const ago = 48 * (1 - T);
   if (realWind) { windFrom = realWind.from; windSpeed = realWind.speed; } else { windFrom = 225 + 40 * Math.sin(T * 12.6); windSpeed = 14 + 6 * Math.sin(T * 9); }
-  const a = 2 + 20 * T, a24 = a + 10, to = (windFrom + 180) % 360;
-  Object.assign(fire, { a, b: a * .45, off: a * .6, a24, b24: a24 * .5, off24: a24 * .65, to });
-  footprint.geometry = ellipse(origin, fire.a, fire.b, to, fire.off);
-  projection.geometry = ellipse(origin, fire.a24, fire.b24, to, fire.off24);
+  const to = (windFrom + 180) % 360, g = spread(48 * T), g24 = spread(48 * T + 24);
+  Object.assign(fire, { a: g.a, b: g.b, off: g.off, a24: g24.a, b24: g24.b, off24: g24.off, to });
+  footprint.geometry = ellipse(origin, g.a, g.b, to, g.off);
+  projection.geometry = ellipse(origin, g24.a, g24.b, to, g24.off);
+  set("sciLive", `Now: wind ${Math.round(windSpeed)} km/h from ${compass(windFrom)} · L:B ${g.LB.toFixed(1)} · head ${g.Rh.toFixed(2)} / flank ${g.Rf.toFixed(2)} / back ${g.Rb.toFixed(2)} km/h · burned ≈ ${Math.round(Math.PI * g.a * g.b * 100).toLocaleString()} ha`);
   const key = Math.round(ago * 2); if (key !== lastKey) { lastKey = key; hot.definitionExpression = hotExpr(ago); }   // only when the visible set changes
   set("timeLabel", T >= .999 ? "Now" : "-" + ago.toFixed(0) + " h");
   const live = $("live"); live.kind = T >= .999 ? "danger" : "warning"; set("live", T >= .999 ? "LIVE" : "REPLAY");
@@ -184,8 +202,7 @@ setInterval(() => {
 // ---------- 4) AREA THREAT ANALYSIS (popup card for fire footprint / peat units) ----------
 const kmXY = (lon, lat) => [(lon - origin.longitude) * 111.3 * Math.cos(origin.latitude * Math.PI / 180), (lat - origin.latitude) * 110.6];
 function threat(kind, at) {
-  const idx = sel(), avg = idx.length ? idx.reduce((s, i) => s + cur[i], 0) / idx.length : -60;
-  const dryF = Math.min(1.5, Math.max(0, (-avg - 40) / 60)), ros = Math.max(.3, windSpeed * .15) * (1 + dryF);   // estimated head-fire spread, km/h
+  const ros = headROS();   // head-fire spread, km/h (same value the polygon uses)
   const r = fire.to * Math.PI / 180, el = document.createElement("div"); el.className = "threat";
   let html = "";
   if (kind === "fire") {
@@ -195,6 +212,9 @@ function threat(kind, at) {
       const d = Math.hypot((x - fire.off) / fire.a, y / fire.b), edge = Math.max(0, (d - 1) * Math.min(fire.a, fire.b)), eta = edge / ros;
       return { n: a.name, edge, eta }; }).sort((p, q) => p.eta - q.eta).slice(0, 4)
       .map(a => `<tr><td>${a.n}</td><td>${a.edge.toFixed(0)} km</td><td>${a.eta < 1 ? "<1" : a.eta.toFixed(0)} h</td><td class="${a.eta < 6 ? "hi" : a.eta < 24 ? "md" : "lo"}">${a.eta < 6 ? "HIGH" : a.eta < 24 ? "MEDIUM" : "LOW"}</td></tr>`).join("") + "</table>";
+  } else if (kind === "burn") {
+    html += `<b>Initial burn area:</b> ${Math.round(burnHa).toLocaleString()} ha – ignition at the strongest VIIRS hotspot (${top.frp} MW)<br>`;
+    html += `<b>Now burning:</b> ${Math.round(Math.PI * fire.a * fire.b * 100).toLocaleString()} ha incl. simulated spread, heading ${compass(fire.to)} at ~${ros.toFixed(1)} km/h`;
   } else {
     const m = at.median_cm == null ? null : Number(at.median_cm), ha = Number(at.area_ha) || 0, ns = Number(at.n_stations) || 0;
     const cls = m == null ? "no recent sensor data" : m < -80 ? "critical" : m < -40 ? "dry – elevated" : "wet – low";
@@ -202,7 +222,10 @@ function threat(kind, at) {
     html += `<b>Peat unit area:</b> ${Math.round(ha).toLocaleString()} ha (${REG[at.prov] || at.prov || "–"})<br><b>Median water table:</b> ${m == null ? "–" : m + " cm"} → fire risk <b>${cls}</b><br>`;
     html += `<b>Hectares at elevated risk:</b> ${m != null && m < -40 ? Math.round(ha).toLocaleString() : 0} ha<br><b>Spread if ignited:</b> ~${ros.toFixed(1)} km/h toward ${compass(fire.to)}<br>Sensors in unit: ${ns} · active hotspots in province: ${nh}`;
   }
-  el.innerHTML = html + "<br><small>Simulated estimate for demonstration.</small>"; return el;
+  el.innerHTML = html + "<br><small>Simulated estimate for demonstration.</small>";
+  if (kind !== "khg") { const b = document.createElement("calcite-button"); b.appearance = "transparent"; b.scale = "s"; b.iconStart = "information";
+    b.textContent = "How is this simulated?"; b.addEventListener("click", () => { $("sci").expanded = true; }); el.appendChild(b); }
+  return el;
 }
 
 // ---------- 5) CALCITE UI ----------
@@ -299,7 +322,7 @@ $("slider").addEventListener("calciteSliderInput", e => { T = e.target.value / 1
 let last = 0, acc = 0;
 function loop(t) {
   requestAnimationFrame(loop); acc += t - last; last = t; if (acc < 125) return; acc = 0;
-  if (PULSE) hot.opacity = opHot * (0.86 + 0.12 * Math.sin(t / 900));       // slow, subtle "breathing" (≈5.6 s cycle)
+  if (PULSE) hot.opacity = opHot * (0.9 + 0.1 * Math.sin(t / 900));       // slow, subtle "breathing" (≈5.6 s cycle)
   if (playing) { T += .0005 * +$("speed").value; if (T > 1) T = 0; $("slider").value = Math.round(T * 1000); applyTime(); }
 }
 applyTime(); applyFilters(false); requestAnimationFrame(loop);

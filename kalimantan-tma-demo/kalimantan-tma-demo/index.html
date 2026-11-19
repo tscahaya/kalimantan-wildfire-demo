@@ -30,7 +30,7 @@
 
   <div id="stage">
     <!-- 3D MAP + Esri scene tools (search, layer list, legend, measurement, navigation) -->
-    <arcgis-scene basemap="dark-gray-vector" ground="world-elevation">
+    <arcgis-scene basemap="satellite" ground="world-elevation">
       <arcgis-search slot="top-right"></arcgis-search>
       <arcgis-expand slot="top-right" expand-tooltip="Layer visibility"><arcgis-layer-list></arcgis-layer-list></arcgis-expand>
       <arcgis-expand slot="top-right" expand-tooltip="Legend"><arcgis-legend></arcgis-legend></arcgis-expand>
@@ -39,6 +39,7 @@
       <arcgis-zoom slot="bottom-right"></arcgis-zoom>
       <arcgis-compass slot="bottom-right"></arcgis-compass>
       <arcgis-navigation-toggle slot="bottom-right"></arcgis-navigation-toggle>
+      <arcgis-basemap-toggle slot="bottom-right" next-basemap="dark-gray-vector"></arcgis-basemap-toggle>
     </arcgis-scene>
 
     <!-- FLOATING LEFT COLUMN: tabs, tab content, always-visible alert ticker -->
@@ -83,6 +84,31 @@
       <div class="float" id="tickerBox">
         <calcite-panel heading="Alert ticker" description="Click an alert to zoom to it"><calcite-list id="alerts"></calcite-list></calcite-panel>
       </div>
+    </div>
+
+    <!-- FLOATING, COLLAPSIBLE SCIENCE CARD -->
+    <div class="float" id="sciBox">
+      <calcite-block id="sci" heading="How the fire spread is simulated" description="Click to expand" collapsible icon-start="information">
+        <div class="sci">
+          <ol>
+            <li><b>Ignition.</b> The <span class="y">yellow polygon</span> is the initial burn area (≈2 km radius), placed at the strongest VIIRS hotspot.</li>
+            <li><b>Wind sets the shape.</b> Fire grows as an ellipse, not a circle. Length-to-breadth ratio
+              <i>L:B = 1 + 8.729·(1 − e<sup>−0.030·U</sup>)<sup>2.155</sup></i> (U = wind speed, km/h): calm = circle, ~14 km/h ≈ 1.9 : 1, strong wind = long and narrow.</li>
+            <li><b>Three spread rates.</b> Head <i>R<sub>h</sub></i> (downwind), back <i>R<sub>b</sub> = R<sub>h</sub>(1−e)/(1+e)</i> and flank
+              <i>R<sub>f</sub> = (R<sub>h</sub>+R<sub>b</sub>)/(2·L:B)</i>, where <i>e = √(L:B²−1)/L:B</i>.</li>
+            <li><b>Dry peat speeds it up.</b> <i>R<sub>h</sub> = (0.08 + 0.02·U)·(1 + d)</i> km/h, with dryness <i>d</i> from the TMAT water table:
+              0 at −40 cm (the Indonesian peat-damage criterion) rising to 1.5 at −130 cm or drier. Wet peat resists fire; drained peat smoulders and re-ignites.</li>
+            <li><b>Huygens' principle.</b> Every point on the fire edge becomes a new ignition point, so the <span class="r">red polygon</span> grows
+              linearly with time: semi-major axis = R₀ + ½(R<sub>h</sub>+R<sub>b</sub>)·t, flank axis = R₀ + that growth ÷ L:B, centre shifted downwind by ½(R<sub>h</sub>−R<sub>b</sub>)·t.</li>
+            <li><b>Projection.</b> The <span class="o">orange outline</span> is the perimeter 24 hours ahead if wind and peat dryness stay as they are.</li>
+          </ol>
+          <div class="live" id="sciLive">–</div>
+          <p><b>Limits.</b> Illustrative only: no fuel map, slope, spotting, rain or suppression, and underground peat burning is not modelled.
+            Operational work uses calibrated tools such as FARSITE, Prometheus or WindNinja.</p>
+          <small>Sources: Forestry Canada Fire Danger Group (1992) FBP System; Richards (1990) elliptical fire-growth model;
+            Rothermel (1972) USDA INT-115; Rein (2013) smouldering of natural fuels; Government Regulation PP 57/2016 (peat water table).</small>
+        </div>
+      </calcite-block>
     </div>
 
     <!-- FLOATING BOTTOM: playback -->

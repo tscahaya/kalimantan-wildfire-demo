@@ -47,3 +47,10 @@ arcgis-scene { width: 100%; height: 100%; }
 .s0 { background: #22c55e; color: #22c55e; } .s1 { background: #a3e635; color: #a3e635; } .s2 { background: #facc15; color: #facc15; }
 .s3 { background: #fb923c; color: #fb923c; } .s4 { background: #ef4444; color: #ef4444; }
 .axis { font-size: var(--calcite-font-size--2); color: var(--calcite-color-text-3); margin: 4px 0 0; }
+
+/* ---------- Science card ---------- */
+#sciBox { position: absolute; z-index: 5; right: 70px; bottom: 76px; width: 380px; max-height: 58%; overflow: auto; }
+.sci { font-size: var(--calcite-font-size--1); line-height: 1.45; }
+.sci ol { padding-left: 18px; margin: 0 0 8px; } .sci li { margin-bottom: 6px; }
+.sci .live { background: var(--calcite-color-foreground-2); border-left: 3px solid #ffea00; padding: 6px 8px; margin: 6px 0; font-size: var(--calcite-font-size--2); }
+.sci .y { color: #ffea00; font-weight: 600; } .sci .r { color: #ff5a1f; font-weight: 600; } .sci .o { color: #ffb43c; font-weight: 600; }
