@@ -54,3 +54,7 @@ arcgis-scene { width: 100%; height: 100%; }
 .sci ol { padding-left: 18px; margin: 0 0 8px; } .sci li { margin-bottom: 6px; }
 .sci .live { background: var(--calcite-color-foreground-2); border-left: 3px solid #ffea00; padding: 6px 8px; margin: 6px 0; font-size: var(--calcite-font-size--2); }
 .sci .y { color: #ffea00; font-weight: 600; } .sci .r { color: #ff5a1f; font-weight: 600; } .sci .o { color: #ffb43c; font-weight: 600; }
+
+/* Smoke canvas sits over the map but under the floating cards; bookmarks tool width */
+#smoke { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
+#bmBox { width: 280px; }

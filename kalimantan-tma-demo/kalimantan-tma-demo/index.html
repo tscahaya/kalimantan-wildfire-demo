@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Kalimantan Wildfire Command Center</title>
+  <title>Peatland Wildfire Command Center</title>
   <!-- ArcGIS Maps SDK for JavaScript 5.1 (also loads the Calcite Design System components automatically) -->
   <script type="module" src="https://js.arcgis.com/5.1/"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -13,10 +13,9 @@
 <calcite-shell>
   <!-- HEADER: title + the three data filters + live/replay badge -->
   <calcite-navigation slot="header">
-    <calcite-navigation-logo slot="logo" heading="Kalimantan Wildfire Command Center"
+    <calcite-navigation-logo slot="logo" heading="Peatland Wildfire Command Center"
       description="Peatland TMAT · VIIRS hotspots · Wind flow"></calcite-navigation-logo>
     <div slot="content-end" class="hdr">
-      <calcite-select id="fProv" scale="s" width="auto" label="Region"><calcite-option value="">All Kalimantan</calcite-option></calcite-select>
       <calcite-select id="fConf" scale="s" width="auto" label="Hotspot confidence">
         <calcite-option value="">All confidence levels</calcite-option><calcite-option value="high">High confidence</calcite-option>
         <calcite-option value="nominal">Nominal / low</calcite-option></calcite-select>
@@ -36,11 +35,14 @@
       <arcgis-expand slot="top-right" expand-tooltip="Legend"><arcgis-legend></arcgis-legend></arcgis-expand>
       <arcgis-expand slot="top-right" expand-tooltip="Measure distance"><arcgis-direct-line-measurement-3d></arcgis-direct-line-measurement-3d></arcgis-expand>
       <arcgis-expand slot="top-right" expand-tooltip="Measure area"><arcgis-area-measurement-3d></arcgis-area-measurement-3d></arcgis-expand>
+      <arcgis-expand slot="top-right" expand-icon="basemap" expand-tooltip="Switch basemap"><arcgis-basemap-gallery></arcgis-basemap-gallery></arcgis-expand>
+      <arcgis-expand slot="top-right" expand-icon="bookmark" expand-tooltip="Bookmarks"><div id="bmBox"><calcite-list id="bmList"></calcite-list></div></arcgis-expand>
       <arcgis-zoom slot="bottom-right"></arcgis-zoom>
       <arcgis-compass slot="bottom-right"></arcgis-compass>
       <arcgis-navigation-toggle slot="bottom-right"></arcgis-navigation-toggle>
-      <arcgis-basemap-toggle slot="bottom-right" next-basemap="dark-gray-vector"></arcgis-basemap-toggle>
+      
     </arcgis-scene>
+    <canvas id="smoke"></canvas>
 
     <!-- FLOATING LEFT COLUMN: tabs, tab content, always-visible alert ticker -->
     <div id="left">
@@ -77,6 +79,7 @@
           <calcite-block heading="Operational layers" collapsible expanded icon-start="layers"
             description="Toggle, fade and re-order (arrows move a layer up / down)">
             <div id="layerList"></div>
+            <calcite-label layout="inline"><calcite-checkbox id="smokeChk" checked></calcite-checkbox>Smoke plume animation</calcite-label>
           </calcite-block>
         </calcite-panel>
       </div>
